@@ -1,7 +1,7 @@
 # Deno Voice Agent Makefile
 # Framework-agnostic commands for managing the project and git submodules
 
-.PHONY: help check-prereqs init install build start start-backend start-frontend clean status update
+.PHONY: help check-prereqs init install install-backend install-frontend build start start-backend start-frontend check test clean status update
 
 # Default target: show help
 help:
@@ -31,16 +31,35 @@ check-prereqs:
 	@command -v pnpm >/dev/null 2>&1 || { echo "⚠️  pnpm not found. Run: corepack enable"; exit 1; }
 	@echo "✓ All prerequisites installed"
 
-# Initialize project: clone submodules and cache dependencies
+# Install backend dependencies (Deno caches dependencies automatically)
+install:
+	@echo "==> Installing dependencies..."
+	@$(MAKE) install-backend
+	@$(MAKE) install-frontend
+	@echo "✓ All dependencies installed"
+
+# Install backend dependencies
+install-backend:
+	@echo "==> Caching Deno dependencies..."
+	deno task cache
+	@echo "✓ Deno dependencies cached"
+
+# Install frontend dependencies
+install-frontend:
+	@if [ ! -d "frontend" ] || [ -z "$$(ls -A frontend)" ]; then \
+		echo "❌ Error: Frontend submodule not initialized. Run 'make init' first."; \
+		exit 1; \
+	fi
+	@echo "==> Installing frontend dependencies..."
+	cd frontend && corepack pnpm install
+	@echo "✓ Frontend dependencies installed"
+
+# Initialize project: clone submodules and install all dependencies
 init:
 	@echo "==> Initializing submodules..."
 	git submodule update --init --recursive
 	@echo ""
-	@echo "==> Caching Deno dependencies..."
-	deno task cache
-	@echo ""
-	@echo "==> Installing frontend dependencies..."
-	cd frontend && corepack pnpm install
+	@$(MAKE) install
 	@echo ""
 	@echo "✓ Project initialized successfully!"
 	@echo ""
@@ -80,6 +99,22 @@ start-frontend:
 	fi
 	@echo "==> Starting frontend on http://localhost:8080"
 	cd frontend && corepack pnpm run dev -- --port 8080 --no-open
+
+# Run prerequisite checks
+check: check-prereqs
+
+# Run contract conformance tests
+test:
+	@if [ ! -f ".env" ]; then \
+		echo "❌ Error: .env file not found. Copy sample.env to .env and add your DEEPGRAM_API_KEY"; \
+		exit 1; \
+	fi
+	@if [ ! -d "contracts" ] || [ -z "$$(ls -A contracts)" ]; then \
+		echo "❌ Error: Contracts submodule not initialized. Run 'make init' first."; \
+		exit 1; \
+	fi
+	@echo "==> Running contract conformance tests..."
+	@bash contracts/tests/run-voice-agent-app.sh
 
 # Update submodules to latest commits
 update:
